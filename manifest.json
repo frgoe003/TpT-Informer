@@ -1,0 +1,45 @@
+{
+   "name": "TpT Informer",
+   "description": "A free TpT popup dashboard that updates and notifies you as you sell",
+   "version": "1.0.0",
+   "manifest_version": 3,
+   "options_page": "options.html",
+   "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["alarms","storage","offscreen","tabs","activeTab"],
+  "host_permissions": ["*://*.teacherspayteachers.com/*"],
+   "action": {
+      "default_popup": "popup.html",
+      "default_icon": {
+         "16": "/images/icon16.png",
+         "32": "/images/icon32.png",
+         "48": "/images/icon48.png",
+         "128": "/images/icon128.png"
+       }
+    },
+    "icons": {
+      "16": "/images/icon16.png",
+      "32": "/images/icon32.png",
+      "48": "/images/icon48.png",
+      "128": "/images/icon128.png"
+    },
+
+     "content_scripts": [
+      {
+        "matches": ["*://*.teacherspayteachers.com/Dashboard/*"],
+        "js": ["content-script.js"],
+        "resources": ["bs5/css/*","bs5/js/*"]
+      },
+      {
+        "matches": ["*://*.teacherspayteachers.com/My-Statistics"],
+        "js": ["content-productStats.js"],
+        "resources": []
+      },
+      {
+        "matches": ["*://*.teacherspayteachers.com/browse","*://*.teacherspayteachers.com/browse/*"],
+        "js": ["content-browse.js"],
+        "resources": []
+      }
+   ]
+ }
