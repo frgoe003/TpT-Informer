@@ -53,8 +53,9 @@ chrome.runtime.onInstalled.addListener (function (details) {
   chrome.storage.sync.set({soundOn:true});
   chrome.storage.sync.set({prev : 0});
   chrome.storage.sync.set({currDate : getTodaysDate()});
-  chrome.storage.sync.set({lastPullDate : -1});
+  //chrome.storage.sync.set({lastPullDate : -1});
   chrome.storage.local.set({lastPull: []});
+
 
   chrome.action.setBadgeText({text:"0"});
   chrome.action.setBadgeBackgroundColor({color:[19, 93, 145, 1]});

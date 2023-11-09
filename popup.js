@@ -12,53 +12,48 @@ let nameInput = document.getElementById("name");
 let goal = document.getElementById("goal");
 let salesSwitch = document.getElementById("onOffSwitch");
 
-let lastSalesCount = 3;
-let earningsGoal = 5;
+const LASTSALESCOUNT = 10;
+const EARNINGSGOAL = 10;
+const DEBUG = false;
+let rawSalesMatrix = [];
+
+let IDX = 1;
 let goalDay = false; let goalMonth = false; goalWeek = false; 
 
-chrome.storage.sync.get(function(result) {
-  lastSalesCount = result.lastSalesCount;
-  earningsGoal = parseInt(result.earningsGoal);
-  //console.log(lastSalesCount,earningsGoal);
-});
-
-if (earningsGoal == null){
-  earningsGoal = 5;
-  chrome.storage.sync.set({earningsGoal:earningsGoal});
-}
-if (lastSalesCount == null){
-  lastSalesCount = 3;
-  chrome.storage.sync.set({lastSalesCount:lastSalesCount});
+if (EARNINGSGOAL == null){
+  const EARNINGSGOAL = 5;
+  chrome.storage.sync.set({EARNINGSGOAL:EARNINGSGOAL});
 }
 
-
+if (LASTSALESCOUNT == null){
+  const LASTSALESCOUNT = 8;
+  chrome.storage.sync.set({LASTSALESCOUNT:LASTSALESCOUNT});
+}
 
 chrome.storage.sync.get(function(result) {
   if (!result.soundOn){
     salesSwitch.checked = false;
   }
-  console.log(result);
   getHeader()
   // check if data is stored
-  if (result.salesMatrix){
-    salesMatrix = result.salesMatrix;
-    updateSalesTable(salesMatrix);
-  }
-  if (result.dayEarnings){
-    updateTotals(result.dayEarnings);
+  startup();
+  console.log(result);
+
+  if (result.earnings != null){
+
+    chrome.storage.local.get(function(result) {
+      popupSales = result.popupSales;
+      updateSalesTable(popupSales);
+    });
+
+    earnings = result.earnings;
+    updateTotals(earnings);
   }
 
-  if (result.weekEarnings){
-    updateTotals(result.weekEarnings,"week");
-  }
-  if (result.monthEarnings){
-    updateTotals(result.monthEarnings,"month");
-  }
-
-  if (result.lastPullDate){
+  if (result.lastPopDate){
     let date = getTodaysDate();
-    let lastPullDate = result.lastPullDate;
-    if (date[0]!=lastPullDate[0] || date[1]!=lastPullDate[1] || date[2]!=lastPullDate[2]){
+    let lastPopDate = result.lastPopDate;
+    if (date[0]!=lastPopDate[0] || date[1]!=lastPopDate[1] || date[2]!=lastPopDate[2]){
       startup();
     }
   }
@@ -67,7 +62,6 @@ chrome.storage.sync.get(function(result) {
     startup();
   }
 });
-
 
 chrome.runtime.sendMessage({id:"updateBadge"});
 
@@ -78,13 +72,292 @@ window.addEventListener('click',function(e){
 })
 
 function startup(){
-  retrieveSales(getUrl("month"),"month");
-  retrieveSales(getUrl("week"),"week");
-  retrieveSales(getUrl());
-  chrome.storage.sync.set({lastPullDate : getTodaysDate()});
+  retrieveSales(getUrl(1,subtractDaysFromDate(getTodaysDate(),30),getTodaysDate()));
+  chrome.storage.sync.set({lastPopDate : getTodaysDate()});
 }
 
-function getHeader() {
+
+async function retrieveSales(url) {
+
+  fetch(url).then(response => {
+    if(response.status === 200){
+      return response.text();
+    }throw new Error("Status != 200");
+  }).then((responseText) => {
+
+    let extractedContent = extractContent(responseText) 
+
+    rawSalesMatrix = rawSalesMatrix.concat(extractedContent);
+
+    let popupSales = [];
+    for (let i=0; i < rawSalesMatrix.length; i++){
+      popupSales = popupSales.concat(extractSales(rawSalesMatrix[i]));
+    }
+
+    console.log(popupSales); 
+    earnings = getEarnings(popupSales);
+    updateTotals(earnings);
+    
+    chrome.storage.sync.set({earnings:earnings});
+    chrome.storage.local.set({popupSales:popupSales});
+
+  }).catch((error) => {
+    console.log(error);
+  });
+}
+
+
+function extractContent(str) {
+  let arr =[];
+  var parser = new DOMParser();
+  var doc = parser.parseFromString(str, 'text/html');
+  var table = doc.querySelectorAll(".odd, .even");
+  var queryDiv = doc.querySelectorAll(".counter")[0]
+  var totalNoProducts = parseInt(queryDiv.querySelectorAll('span')[0].innerText);
+  var noProducts = parseInt(queryDiv.innerText.split('-')[1].split(' ')[0])
+  arr.push(table);
+
+  if (noProducts<totalNoProducts){
+    IDX+=1;
+    if (DEBUG && IDX>3){
+      return arr
+    }
+    retrieveSales(getUrl(IDX,subtractDaysFromDate(getTodaysDate(),30),getTodaysDate()));
+  }
+  return arr
+};
+
+function extractSales(NodeList){
+
+  let salesMatrix = [];
+
+  for (let i=0; i < NodeList.length; i++){
+
+    let newRow = {};
+
+    let curr = NodeList[i];
+    let cells = curr.querySelectorAll("td");
+    
+    newRow.date = cells[0].innerHTML;
+    newRow.orderId = cells[1].innerHTML;
+    newRow.source = cells[2].innerHTML;
+    s = cells[3].textContent;
+    newRow.itemSold = s.substring(98,112).replace(/[]/g,"")+"..."; //.substring(31,41)
+
+    newRow.buyer = cells[4].innerHTML;
+    newRow.lastDownload = cells[5].innerHTML;
+    newRow.licenses = cells[6].innerHTML;
+    newRow.price = cells[7].innerHTML;
+    newRow.commission = cells[8].innerHTML;
+    newRow.transactionFee = cells[9].innerHTML;
+    newRow.tax_seller = cells[10].innerHTML;
+    newRow.tax_tpt = cells[11].innerHTML;
+    newRow.earnings = cells[12].innerText.replace(/[^.0-9$]/g,"");
+     
+    salesMatrix.push(newRow);
+  }
+  return salesMatrix
+}
+
+function updateSalesTable(popupSales){
+  let i = 0;
+  salesTable.innerHTML = "";
+  
+  // delayed loop for smooth animation
+  function loopIteration() {
+    var row = document.createElement("div");
+    row.classList.add("row");
+
+    for (let j=0; j < 3; j++){
+      var cell = document.createElement("div");
+      cell.classList.add("col",'themed-grid-col');
+
+      let sale = popupSales[i];
+      let saleDate = sale.date;
+      let saleItem = sale.itemSold;
+      let saleEarnings = sale.earnings;
+
+      if (j==0){
+        cell.innerHTML = saleDate;
+      }
+      if (j==1){
+        cell.innerHTML = saleItem;
+      }
+      if (j==2){
+        cell.innerHTML = saleEarnings;
+      }
+      row.appendChild(cell);
+
+    } 
+    salesTable.appendChild(row);
+    i++;
+
+    if (i < LASTSALESCOUNT) {
+      setTimeout(loopIteration, 20); 
+    }
+  }
+
+  // Start the first iteration of the loop
+  loopIteration();
+}
+
+
+function getEarnings(popupSales){
+  // input popupSales as array of objects and return array of size three, [day,week,month]
+  let earnings = [];
+  let day = 0; let week = 0; let month = 0;
+  let date = getTodaysDate();
+  let dayDate = date[0]+"/"+date[1]+"/"+date[2];
+  let weekDate = subtractDaysFromDate(date,7);
+  let monthDate = subtractDaysFromDate(date,30);
+
+  for (let i=0; i < popupSales.length; i++){
+    let sale = popupSales[i];
+    let saleDate = sale.date;
+    let saleEarnings = parseFloat(sale.earnings.replace("$",""));
+    if (saleDate==dayDate){
+      day+=saleEarnings;
+    }
+    if (saleDate>=weekDate[0]+"/"+weekDate[1]+"/"+weekDate[2]){
+      week+=saleEarnings;
+    }
+    if (saleDate>=monthDate[0]+"/"+monthDate[1]+"/"+monthDate[2]){
+      month+=saleEarnings;
+    }
+  }
+  return [day.toFixed(2),week.toFixed(2),month.toFixed(2)]
+}
+
+
+function updateTotals(earnings){
+  // input earnings as array of size three, [day,week,month]
+
+  weekly = parseFloat(earnings[1].replace("$",""));
+  weeklyEarnings.innerHTML = "$"+weekly;
+
+  arr = getPercentage(weekly,"week");
+  var lvl = arr[0];
+  var percentage = parseInt(arr[1]).toString();
+
+  switch(lvl){
+    case 0:
+      goalWeek= false;
+      weeklyCircle.className = "ecircle c100 p"+ percentage +" small green";
+      break
+    case 1:
+      goalWeek= true;
+      weeklyCircle.className = "ecircle c100 p"+ percentage +" small orange";
+      if (!goalDay){
+        goal.className = "orange";
+        beatenBy = ((lvl-1)*100)+parseInt(percentage);
+        goal.innerHTML = "You beat your weekly goal by " + beatenBy +"% " + "&#x1F389";
+      }
+      break
+    default:
+      goalWeek= true;
+      if (!goalDay){
+        goal.className = "pink";
+        beatenBy = ((lvl-1)*100)+parseInt(percentage);
+        goal.innerHTML = "You beat your weekly goal by " + beatenBy +"%" + "&#x1F37E";
+      }
+      weeklyCircle.className = "ecircle c100 p"+ percentage +" small pink";
+  }
+
+  monthly=parseFloat(earnings[2].replace("$",""));
+  monthlyEarnings.innerHTML = "$"+monthly;
+
+  arr=getPercentage(monthly,"month");
+  var lvl=arr[0];
+  var percentage = parseInt(arr[1]).toString();
+  
+  switch(lvl){
+    case 0:
+      goalMonth = false;
+      monthlyCircle.className = "ecircle c100 p"+ percentage +" small green"; 
+      break
+    case 1:
+      if (!goalDay && !goalWeek){
+        goal.className = "orange";
+        beatenBy = ((lvl-1)*100)+parseInt(percentage);
+        goal.innerHTML = " You beat your monthly goal by " + beatenBy +"% " + "&#x1F389";
+      }
+      monthlyCircle.className = "ecircle c100 p"+ percentage +" small orange"; 
+      break
+    default:
+      goalMonth= true;
+      if (!goalDay && !goalWeek){
+        goal.className = "pink";
+        beatenBy = ((lvl-1)*100)+parseInt(percentage);
+        goal.innerHTML = "You beat your monthly goal by " + beatenBy +"%" + "&#x1F37E";
+      }
+      monthlyCircle.className = "ecircle c100 p"+ percentage +" small pink"; 
+  }
+
+  todays = parseFloat(earnings[0].replace("$",""));
+  todaysEarnings.innerHTML = "$"+todays;
+
+  arr=getPercentage(todays);
+  var lvl=arr[0];
+  var percentage = parseInt(arr[1]).toString();
+
+  switch(lvl){
+    case 0:
+      todaysCircle.className = "ecircle c100 p"+ percentage +" small green";
+      break
+    case 1:
+      todaysCircle.className = "ecircle c100 p"+ percentage +" small orange";
+      goal.className = "orange";
+      beatenBy = ((lvl-1)*100)+parseInt(percentage);
+      goal.innerHTML = "You beat your daily goal by " + beatenBy +"% " + "&#x1F389";
+      break
+    default:
+      goal.className = "pink";
+      beatenBy = ((lvl-1)*100)+parseInt(percentage);
+      goal.innerHTML = "You beat your daily goal by " + beatenBy +"%" + "&#x1F37E"; //&#x + 🍾1F37E 🎉1F389 🎊1F38A 🥂1F942
+      todaysCircle.className = "ecircle c100 p"+ percentage +" small pink";
+  }
+}
+
+function getPercentage(num,mode){
+  console.log(num,mode,EARNINGSGOAL)
+  switch(mode){
+    case "week":
+      fraction=num/((EARNINGSGOAL/30)*7)
+      break
+    case "month":
+      fraction=num/(EARNINGSGOAL)
+      break
+    default:
+      fraction=num/(EARNINGSGOAL/30)
+  }
+
+  return getDecimalPart(fraction)
+}
+
+
+function getDecimalPart(num) {
+  let arr=[];
+  let lvl = parseInt(num);
+  arr.push(lvl);
+  if (Number.isInteger(num)) {
+    arr.push(0);
+    return arr
+  }
+  const decimalStr = num.toString().split('.')[1];
+  
+  if (decimalStr.length>=2){
+    const sub = decimalStr.substring(0,2);
+    arr.push(sub);
+    return arr
+  }
+  if (decimalStr.length===1){
+    arr.push(decimalStr+"0");
+    return arr
+  }
+  return arr;
+}
+
+function getHeader(){
   chrome.storage.sync.get(function(result) {
     if (result.sellerName && result.imgUrl){
       nameInput.innerHTML = result.sellerName;
@@ -119,288 +392,29 @@ function getHeader() {
 }
 
 
-async function retrieveSales(url,mode) {
 
-  fetch(url).then(response => {
-    if(response.status === 200){
-      return response.text();
-    }throw new Error("Status != 200");
-  }).then((responseText) => {
-    
-    arr = extractContent(responseText);
-    table=arr[0];
-    totals=arr[1];
-
-    if (!totals.item(1)){
-      earnings="0";
-    } else{
-    earnings=totals.item(1).innerText.replace(/[^.0-9$]/g,"");
-    }
-    salesMatrix= extractSales(table);
-    chrome.storage.sync.set({salesMatrix:salesMatrix});
-    updateSalesTable(salesMatrix); 
-
-    switch(mode){
-      case "week":
-        updateTotals(earnings,"week"); 
-        chrome.storage.sync.set({weekEarnings:earnings});
-        break
-      case "month":
-        updateTotals(earnings,"month");
-        chrome.storage.sync.set({monthEarnings:earnings});
-        break
-      default:
-        updateTotals(earnings,"tdy");
-        chrome.storage.sync.set({dayEarnings:earnings});
-    }
-
-  }).catch((error) => {
-    console.log(error);
-  });
-
-}
-
-function extractContent(str) {
-  let arr =[];
-  var parser = new DOMParser();
-  var doc = parser.parseFromString(str, 'text/html');
-  var totals = doc.querySelectorAll(".amount");
-  var table = doc.querySelectorAll(".odd, .even");
-  arr.push(table);arr.push(totals);
-  return arr
-    
-};
-
-function extractSales(NodeList){
-  lastSalesCount = Math.min(NodeList.length,lastSalesCount);
-  let dateList = [];let salesList = []; let earningsList = []; let itemList = [];
-
-  for (let i=0; i<lastSalesCount;i++){
-    curr = NodeList.item(i);
-    date = curr.cells.item(0).innerHTML;
-    s= curr.cells.item(3).textContent;
-    itemSold = s.substring(98,112).replace(/[]/g,"")+"..."; //.substring(31,41)
-    sale = curr.cells.item(7).innerHTML; 
-    earnings = curr.cells.item(12).innerText.replace(/[^.0-9$]/g,"");
-     
-    dateList.push(date);
-    salesList.push(sale);
-    earningsList.push(earnings);
-    itemList.push(itemSold);
-  }
-  salesMatrix=[dateList,itemList,earningsList]; //salesList,
-  return salesMatrix
-}
-
-function updateSalesTable(salesMatrix){
-  const len = Math.min(NodeList.length,lastSalesCount);
-
-  let i = 0;
-
-  // delayed loop for smooth animation
-  function loopIteration() {
-    var row = document.createElement("div");
-    row.classList.add("row");
-
-    for (let j=0;j<=2;j++){
-      var cell = document.createElement('div');
-
-      switch (j){
-        case 0:
-          cell.classList.add('col-4','themed-grid-col'); break
-        case 1:
-          cell.classList.add('col-4','themed-grid-col'); break
-        case 2:
-          cell.classList.add('col-4','themed-grid-col');
-      }
-
-      cell.innerHTML = salesMatrix[j][i]; //
-      row.appendChild(cell);
-  } salesTable.appendChild(row);
-    i++;
-
-    if (i < lastSalesCount) {
-      setTimeout(loopIteration, 10); 
-    }
-  }
-  // Start the first iteration of the loop
-  loopIteration();
-}
-
-
-
-function updateTotals(earnings,mode){
-
-  switch(mode){
-    case "week":
-      weekly=parseFloat(earnings.replace("$",""));
-      weeklyEarnings.innerHTML = "$"+weekly;
-
-      arr=getPercentage(weekly,"week");
-      var lvl=arr[0];
-      var percentage = parseInt(arr[1]).toString();
-
-      switch(lvl){
-        case 0:
-          goalWeek= false;
-          weeklyCircle.className = "ecircle c100 p"+ percentage +" small green";
-          break
-        case 1:
-          goalWeek= true;
-          weeklyCircle.className = "ecircle c100 p"+ percentage +" small orange";
-          if (!goalDay){
-            goal.className = "orange";
-            beatenBy = ((lvl-1)*100)+parseInt(percentage);
-            goal.innerHTML = "You beat your weekly goal by " + beatenBy +"% " + "&#x1F389";
-          }
-          break
-        default:
-          goalWeek= true;
-          if (!goalDay){
-            goal.className = "pink";
-            beatenBy = ((lvl-1)*100)+parseInt(percentage);
-            goal.innerHTML = "You beat your weekly goal by " + beatenBy +"%" + "&#x1F37E";
-          }
-          weeklyCircle.className = "ecircle c100 p"+ percentage +" small pink";
-      }
-      break
-
-    case "month":
-      monthly=parseFloat(earnings.replace("$",""));
-      monthlyEarnings.innerHTML = "$"+monthly;
-
-      arr=getPercentage(monthly,"month");
-      var lvl=arr[0];
-      var percentage = parseInt(arr[1]).toString();
-      
-      //console.log(arr);
-      switch(lvl){
-        case 0:
-          goalMonth = false;
-          monthlyCircle.className = "ecircle c100 p"+ percentage +" small green"; 
-          break
-        case 1:
-          if (!goalDay && !goalWeek){
-            goal.className = "orange";
-            beatenBy = ((lvl-1)*100)+parseInt(percentage);
-            goal.innerHTML = " You beat your monthly goal by " + beatenBy +"% " + "&#x1F389";
-          }
-          monthlyCircle.className = "ecircle c100 p"+ percentage +" small orange"; 
-          break
-        default:
-          goalMonth= true;
-          if (!goalDay && !goalWeek){
-            goal.className = "pink";
-            beatenBy = ((lvl-1)*100)+parseInt(percentage);
-            goal.innerHTML = "You beat your monthly goal by " + beatenBy +"%" + "&#x1F37E";
-          }
-          monthlyCircle.className = "ecircle c100 p"+ percentage +" small pink"; 
-      }
-      break
-
-    default:
-      todays=parseFloat(earnings.replace("$",""));
-      todaysEarnings.innerHTML = "$"+todays;
-
-      arr=getPercentage(todays);
-      var lvl=arr[0];
-      var percentage = parseInt(arr[1]).toString();
-
-      switch(lvl){
-        case 0:
-          todaysCircle.className = "ecircle c100 p"+ percentage +" small green";
-          break
-        case 1:
-          todaysCircle.className = "ecircle c100 p"+ percentage +" small orange";
-          goal.className = "orange";
-          beatenBy = ((lvl-1)*100)+parseInt(percentage);
-          goal.innerHTML = "You beat your daily goal by " + beatenBy +"% " + "&#x1F389";
-          break
-        default:
-          goal.className = "pink";
-          beatenBy = ((lvl-1)*100)+parseInt(percentage);
-          goal.innerHTML = "You beat your daily goal by " + beatenBy +"%" + "&#x1F37E"; //&#x + 🍾1F37E 🎉1F389 🎊1F38A 🥂1F942
-          todaysCircle.className = "ecircle c100 p"+ percentage +" small pink";
-      }
-  }
-}
-
-function getPercentage(num,mode){
-  //console.log(num,earningsGoal)
-  switch(mode){
-    case "week":
-      fraction=num/((earningsGoal/30)*7)
-      break
-    case "month":
-      fraction=num/(earningsGoal)
-      break
-    default:
-      fraction=num/(earningsGoal/30)
-  }
-
-  return getDecimalPart(fraction)
-  
-}
-
-
-function getDecimalPart(num) {
-  let arr=[];
-  let lvl = parseInt(num);
-  arr.push(lvl);
-  if (Number.isInteger(num)) {
-    arr.push(0);
-    return arr
-  }
-  const decimalStr = num.toString().split('.')[1];
-
-  if (decimalStr.length>=2){
-    const sub = decimalStr.substring(0,2);
-    arr.push(sub);
-    return arr
-  }
-  if (decimalStr.length===1){
-    arr.push(decimalStr+"0");
-    return arr
-  }
-  return arr;
-}
-
-function getUrl(mode){
-  var date = getDate(mode);
-  var url = "https://www.teacherspayteachers.com/My-Sales?source=Overall&start_date=" + date[0] + "%2F" + date[1] + "%2F"+ date[2] + "&end_date="+ date[3] +"%2F"+ date[4] +"%2F"+ date[5];
+function getUrl(IDX,startDate,endDate){
+  console.log(IDX)
+  //console.log(startDate)
+  //console.log(endDate)
+  var url = "https://www.teacherspayteachers.com/My-Sales/page:"+IDX+"?source=Overall&start_date=" + startDate[0] + "%2F" + startDate[1] + "%2F"+ startDate[2] + "&end_date="+ endDate[0] +"%2F"+ endDate[1] +"%2F"+ endDate[2];
   return url 
 }
 
-function getDate(mode){
-  let arr=[];
-  var date = new Date();
-  var pastDate = date.getDate() - 7;
-  date.setDate(pastDate);
-  var pwd = String(date.getDate()).padStart(2, '0');
-  var pwm = String(date.getMonth() + 1).padStart(2, '0');
-  var pwyyy = date.getFullYear();
-  var date = new Date();
-  var pastDate = date.getDate() - 30;
-  date.setDate(pastDate);
-  var pmd = String(date.getDate()).padStart(2, '0');
-  var pmm = String(date.getMonth() + 1).padStart(2, '0');
-  var pmyyy = date.getFullYear();
-  var date = new Date();
-  var dd = String(date.getDate()).padStart(2, '0');
-  var mm = String(date.getMonth() + 1).padStart(2, '0');
-  var yyyy = date.getFullYear();
+function subtractDaysFromDate(inputDate, daysToSubtract) {
+  const [mm, dd, yyyy] = inputDate;
+  
+  const date = new Date(`${mm}/${dd}/${yyyy}`);
 
-  switch(mode){
-    case "week":
-      arr.push(pwm);arr.push(pwd);arr.push(pwyyy);arr.push(mm);arr.push(dd);arr.push(yyyy);  
-      break;
-    case "month":
-      arr.push(pmm);arr.push(pmd);arr.push(pmyyy);arr.push(mm);arr.push(dd);arr.push(yyyy);
-      break
-    default:
-      arr.push(mm);arr.push(dd);arr.push(yyyy);arr.push(mm);arr.push(dd);arr.push(yyyy);
-  }
-  return arr
+  date.setDate(date.getDate() - daysToSubtract);
+
+  const newMonth = date.getMonth() + 1; // Months are 0-indexed, so add 1
+  const newDay = date.getDate();
+  const newYear = date.getFullYear();
+
+  // Format the result in the same format ['mm', 'dd', 'yyyy']
+  const result = [String(newMonth).padStart(2, '0'), String(newDay).padStart(2, '0'), String(newYear)];
+  return result;
 }
 
 function createTxt(string){

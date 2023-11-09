@@ -249,8 +249,6 @@ function date1BeforeDate2(date1,date2){
       }
     }
   }
-
-
   return false
 }
 
@@ -336,10 +334,8 @@ async function keywordCrawl(products, IDX, keyword) {
     console.error("Error fetching data:", error);
     throw error; // Rethrow the error for the wrapper function to handle
   }
-
-
-
 }
+
 
 function processKeywordCrawl(rows,marketSize){
 
