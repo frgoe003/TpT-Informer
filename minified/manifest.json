@@ -8,7 +8,7 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["alarms","storage","offscreen","tabs","activeTab"],
+  "permissions": ["alarms","storage","offscreen"],
   "host_permissions": ["*://*.teacherspayteachers.com/*","*://*.firebaseio.com/*","*://*.firebase.google.com/*"],
    "action": {
       "default_popup": "popup.html",

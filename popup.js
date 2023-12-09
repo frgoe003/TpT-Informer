@@ -12,13 +12,60 @@ let nameInput = document.getElementById("name");
 let goal = document.getElementById("goal");
 let salesSwitch = document.getElementById("onOffSwitch");
 
-const LASTSALESCOUNT = 10;
+
+let username = document.getElementById("username");
+let input = document.getElementById("login");
+let loginBtnDiv = document.getElementById("loginBtnDiv");
+let loginInput = document.getElementById("loginInput");
+
+chrome.storage.sync.get(function(result) {
+  if (result.isPremium){
+    loginInput.innerHTML = "<div style='justify-content:center;align-items:center'>Premium User &#x1F389</div>";
+    loginBtnDiv.style.display = "none";
+  }
+  else{
+    loginBtnDiv.style.display = "display-block";
+    loginInput.innerHTML += '<hr style="margin:5px"></hr><div style="justify-content:center;align-items:center">Upgrade to TpT-Informer <a target="_blank" rel="noopener noreferrer" href="https://tpt-informer.web.app/"><u>premium</u></a></div><hr style="margin:5px"></hr>';
+  }
+});
+
+input.addEventListener("click", function(event) {
+
+  let firebaseRTDB = 'https://tpt-informer-default-rtdb.firebaseio.com/users/'+username.value+'.json';
+
+  fetch(firebaseRTDB)  
+  .then(response => {
+    if (!response.ok) {
+      throw new Error('Network response was not ok.');
+    }
+    console.log(response);
+    return response.json();
+  })
+  .then(data => {
+    // Handle the data returned from the fetch request
+    if (data == username.value){
+      chrome.storage.sync.set({isPremium:true});
+      loginInput.innerHTML = "<div style='justify-content:center;align-items:center'>Premium User &#x1F389</div>";
+      loginBtnDiv.style.display = "none";
+    }
+    else{
+    alert("Invalid personal identifier");
+
+    }
+  })
+  .catch(error => {
+    // Handle any errors that occurred during the fetch
+    console.error('There was a problem with the fetch operation:', error);
+  });
+});
+
+const LASTSALESCOUNT = 7;
 const EARNINGSGOAL = 10;
 const DEBUG = false;
 let rawSalesMatrix = [];
 
 let IDX = 1;
-let goalDay = false; let goalMonth = false; goalWeek = false; 
+let goalDay = false; let goalMonth = false; let goalWeek = false; 
 
 if (EARNINGSGOAL == null){
   const EARNINGSGOAL = 5;
@@ -36,26 +83,36 @@ chrome.storage.sync.get(function(result) {
   }
   getHeader()
   // check if data is stored
-  startup();
-  console.log(result);
+  //startup();
+
+  if (!result.imgUrl || !result.sellerName){
+    getHeader();
+    startup();
+    return 
+  }
 
   if (result.earnings != null){
 
     chrome.storage.local.get(function(result) {
-      popupSales = result.popupSales;
+      let popupSales = result.popupSales;
       updateSalesTable(popupSales);
     });
 
-    earnings = result.earnings;
+    let earnings = result.earnings;
     updateTotals(earnings);
   }
 
   if (result.lastPopDate){
     let date = getTodaysDate();
     let lastPopDate = result.lastPopDate;
+    console.log(date,lastPopDate)
     if (date[0]!=lastPopDate[0] || date[1]!=lastPopDate[1] || date[2]!=lastPopDate[2]){
       startup();
     }
+  }
+  if (result.hasChanges){
+    chrome.storage.sync.set({hasChanges:false});
+    startup();
   }
 
   else{
@@ -94,8 +151,7 @@ async function retrieveSales(url) {
       popupSales = popupSales.concat(extractSales(rawSalesMatrix[i]));
     }
 
-    console.log(popupSales); 
-    earnings = getEarnings(popupSales);
+    let earnings = getEarnings(popupSales);
     updateTotals(earnings);
     
     chrome.storage.sync.set({earnings:earnings});
@@ -141,7 +197,7 @@ function extractSales(NodeList){
     newRow.date = cells[0].innerHTML;
     newRow.orderId = cells[1].innerHTML;
     newRow.source = cells[2].innerHTML;
-    s = cells[3].textContent;
+    let s = cells[3].textContent;
     newRow.itemSold = s.substring(98,112).replace(/[]/g,"")+"..."; //.substring(31,41)
 
     newRow.buyer = cells[4].innerHTML;
@@ -232,13 +288,16 @@ function getEarnings(popupSales){
 function updateTotals(earnings){
   // input earnings as array of size three, [day,week,month]
 
-  weekly = parseFloat(earnings[1].replace("$",""));
+  let weekly = parseFloat(earnings[1].replace("$",""));
   weeklyEarnings.innerHTML = "$"+weekly;
 
-  arr = getPercentage(weekly,"week");
+  let arr = getPercentage(weekly,"week");
   var lvl = arr[0];
   var percentage = parseInt(arr[1]).toString();
 
+  let beatenBy
+  let goalWeek
+  
   switch(lvl){
     case 0:
       goalWeek= false;
@@ -263,10 +322,10 @@ function updateTotals(earnings){
       weeklyCircle.className = "ecircle c100 p"+ percentage +" small pink";
   }
 
-  monthly=parseFloat(earnings[2].replace("$",""));
+  let monthly = parseFloat(earnings[2].replace("$",""));
   monthlyEarnings.innerHTML = "$"+monthly;
 
-  arr=getPercentage(monthly,"month");
+  arr = getPercentage(monthly,"month");
   var lvl=arr[0];
   var percentage = parseInt(arr[1]).toString();
   
@@ -293,10 +352,10 @@ function updateTotals(earnings){
       monthlyCircle.className = "ecircle c100 p"+ percentage +" small pink"; 
   }
 
-  todays = parseFloat(earnings[0].replace("$",""));
+  let todays = parseFloat(earnings[0].replace("$",""));
   todaysEarnings.innerHTML = "$"+todays;
 
-  arr=getPercentage(todays);
+  arr = getPercentage(todays);
   var lvl=arr[0];
   var percentage = parseInt(arr[1]).toString();
 
@@ -319,7 +378,7 @@ function updateTotals(earnings){
 }
 
 function getPercentage(num,mode){
-  console.log(num,mode,EARNINGSGOAL)
+  let fraction 
   switch(mode){
     case "week":
       fraction=num/((EARNINGSGOAL/30)*7)
@@ -371,16 +430,18 @@ function getHeader(){
       }).then((responseText) => {
         var parser = new DOMParser();
         var doc = parser.parseFromString(responseText, 'text/html');
-        img = doc.getElementsByClassName("Image-module__image--PG7Ib"); // Avatar-module__root--eRcqn Avatar-module__xl--wDBxG
-        imgUrl = img.item(0).src;
+        let img = doc.getElementsByClassName("Image-module__image--PG7Ib"); // Avatar-module__root--eRcqn Avatar-module__xl--wDBxG
+        let imgUrl = img.item(0).src;
 
         let details = doc.getElementsByClassName("SellerDashboardHeader__details")[0]
-        seller = details.querySelectorAll(".Link-module__link--GFbUH"); // SellerDashboard__storeName
+        let seller = details.querySelectorAll(".Link-module__link--GFbUH"); // SellerDashboard__storeName
 
-        sellerName = seller[0].innerText;
+        let sellerName = seller[0].innerText;
         nameInput.innerHTML=sellerName;
         imageInput.src=imgUrl;
 
+        console.log(sellerName,imgUrl)
+      
         chrome.storage.sync.set({sellerName : sellerName});
         chrome.storage.sync.set({imgUrl : imgUrl});
       }).catch((error) => {
@@ -394,7 +455,6 @@ function getHeader(){
 
 
 function getUrl(IDX,startDate,endDate){
-  console.log(IDX)
   //console.log(startDate)
   //console.log(endDate)
   var url = "https://www.teacherspayteachers.com/My-Sales/page:"+IDX+"?source=Overall&start_date=" + startDate[0] + "%2F" + startDate[1] + "%2F"+ startDate[2] + "&end_date="+ endDate[0] +"%2F"+ endDate[1] +"%2F"+ endDate[2];
@@ -425,7 +485,7 @@ function createTxt(string){
   link.click();
 }
 function updateList(){
-  listItem = document.createElement('li');
+  let listItem = document.createElement('li');
   listItem.innerHTML = sales[i];
   popupList.appendChild(listItem);
 }

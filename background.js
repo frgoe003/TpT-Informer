@@ -49,15 +49,20 @@ function updateBadge(data){
 }
 
 chrome.runtime.onInstalled.addListener (function (details) {
-  //console.log("installed")
   chrome.storage.sync.set({soundOn:true});
+
+  //chrome.storage.sync.set({isPremium:false});
+
   chrome.storage.sync.set({prev : 0});
   chrome.storage.sync.set({currDate : getTodaysDate()});
+
+  chrome.storage.sync.set({crawlCount : 0});
+  chrome.storage.sync.set({lastPopDate : [-1,-1,-1]});
+
   //chrome.storage.sync.set({lastPullDate : -1});
   chrome.storage.local.set({lastPull: []});
 
-
-  chrome.action.setBadgeText({text:"0"});
+  chrome.action.setBadgeText({text: "0"});
   chrome.action.setBadgeBackgroundColor({color:[19, 93, 145, 1]});
   chrome.alarms.create("salesAlarm", {periodInMinutes: 1}); //, periodInMinutes: 0.1
 });
@@ -68,7 +73,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 async function retrieveSales() {
   chrome.storage.sync.get(function(result) {
-    prev = result.prev;
+    let prev = result.prev;
     console.log("prev",prev)
   });
   chrome.storage.sync.get(function(result) {
@@ -77,13 +82,16 @@ async function retrieveSales() {
     console.log(date,today,date[0]!=today[0], date[1]!=today[1], date[2]!=today[2])
     if (date[0]!=today[0] || date[1]!=today[1] || date[2]!=today[2]){
       chrome.storage.sync.set({prev : 0});
+      chrome.storage.sync.set({crawlCount : 0});
       chrome.storage.sync.set({currDate : today});
-      prev=0;
+      let prev = 0;
       updateBadge(prev.toString());
     }
   });
 
-  url=getUrl();
+  
+  let url = getUrl();
+
   fetch(url)
   .then(response => {
     if (response.redirected) { 
@@ -100,18 +108,23 @@ async function retrieveSales() {
     if (isNaN(count)){
       count=0;
     }
-    console.log(prev,count)
 
-    if (count>prev){
+    chrome.storage.sync.get(function(result) {
+      let prev = result.prev;
+      console.log(prev,count)
 
-      chrome.storage.sync.get(function(result) {
-        if (result.soundOn){
-          createSaleSoundHtml()
-        }
-      });
-      chrome.storage.sync.set({prev : count});
-      updateBadge(count.toString());
-    }
+      if (count>prev){
+  
+        chrome.storage.sync.get(function(result) {
+          if (result.soundOn){
+            createSaleSoundHtml()
+          }
+        });
+        chrome.storage.sync.set({prev : count});
+        chrome.storage.sync.set({hasChanges : true});
+        updateBadge(count.toString());
+      }
+    });
   })
 }
 

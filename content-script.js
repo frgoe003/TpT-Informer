@@ -1,22 +1,28 @@
-
-
 let rawSalesMatrix = [];
 let IDX = 1;
 const DEBUG = true;
 let ACTIVE = false;
 let TABOPEN = false;
+const DAILY_LIMIT_ACTIVE = false;
+let ISPREMIUM = false;
+const DAILYSEARCHLIMIT = 3;
+const FREE_LIMIT = 2;
 
 startup()
 
-// add bootstrap
+chrome.storage.sync.get(function(result) {
+  if (result.isPremium){
+    ISPREMIUM = true;
+  }
+});
 
+// add bootstrap
 function addBootstrap(){  
   let bootstrap = document.createElement('link');
   bootstrap.rel = 'stylesheet';
   bootstrap.href = 'https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css';
   document.head.appendChild(bootstrap);
 }
-
 
 async function startup(){
     addBootstrap()
@@ -269,41 +275,26 @@ function subtractDaysFromDate(inputDate, daysToSubtract) {
 }
 
 
-
 ///////
 // KEYWORDS
 ///////
 
 async function keywordCrawlWrapper(keyword) {
-  let ITERATIONS = 5;
+  let ITERATIONS = 3;
   let products = [];
 
-  for (let i = 1; i <= ITERATIONS; i++) { // Use <= to include the last iteration
+  for (let i = 1; i < ITERATIONS+1; i++) { // Use <= to include the last iteration
     try {
       const productsNew = await keywordCrawl(products, i, keyword); // Pass i as the page index
       products = products.concat(productsNew);
     } catch (error) {
       console.error("Error crawling keyword:", error);
     }
-
-    //remove loading screen
-    /*
-    try {
-      document.getElementsByClassName("loadingScreen")[0].remove(); 
-    }
-    catch{
-      console.log("no loading screen")
-    }
-    // Update the progress bar
-    chrome.storage.sync.set({keywordCrawlCounter: (IDX/ITERATIONS)});
-    displayLoadingScreen();
-    */
-
   }
   console.log(products)
-  let analysis = analyzeKeywordCrawl(keyword,products);
+  let crawlStats = analyzeKeywordCrawl(keyword,products);
 
-  return products;
+  return crawlStats;
 }
 
 async function keywordCrawl(products, IDX, keyword) {
@@ -520,9 +511,12 @@ function analyzeKeywordCrawl(keyword,products){
   }
 
   crawlStats.descriptionStats = analyzeDescriptions(description_and_title,keyword);
-  displayProductStats(crawlStats);
+  
   return crawlStats
 }
+
+
+const MOSTCOMMONCOUNT = 15
 
 function analyzeDescriptions(descriptions,keyword){
   mostCommonWords = {};
@@ -540,8 +534,7 @@ function analyzeDescriptions(descriptions,keyword){
       }
     }
   }
-  return getMostCommonWords(15,mostCommonWords,keyword);
-  
+  return getMostCommonWords(MOSTCOMMONCOUNT,mostCommonWords,keyword);
 }
 
 
@@ -581,6 +574,8 @@ function removeUnsignificantWords(mostCommonWords,keyword){
   
   // generate all keyword combinations
   keywords = keyword.split(" ");
+  keywords.push(keywords.join(''))
+
   kws = [];
   for (kw in keywords){
     kws.push(keywords[kw]);
@@ -658,7 +653,6 @@ function launchDashboard() {
     console.log('TODAY',todaysSales);
     console.log('Weekly',weeklySales);
     console.log('Monthly',monthlySales);    
-
 
     /*
     - Today's Sales
@@ -805,6 +799,23 @@ function addInformerTab(){
   tabs[0].parentNode.insertBefore(informerTab, tabs[0].nextSibling);
 }
 
+function getTabBar(){
+  const div = document.createElement("div");
+
+  div.innerHTML = `
+    <nav class="nav nav-pills flex-column flex-sm-row">
+    <a class="flex-sm-fill text-sm-center nav-link active" aria-current="page" href="#">Active</a>
+    <a class="flex-sm-fill text-sm-center nav-link" href="#">Longer nav link</a>
+    <a class="flex-sm-fill text-sm-center nav-link" href="#">Link</a>
+    <a class="flex-sm-fill text-sm-center nav-link disabled" href="#" tabindex="-1" aria-disabled="true">Disabled</a>
+    </nav>
+  `
+
+  return div
+}
+
+
+
 
 function getInformerTab(){
 
@@ -825,41 +836,64 @@ function getInformerTab(){
   inputElement.setAttribute('id', 'keywordInput');
   inputElement.setAttribute('placeholder', 'Enter a keyword...');
 
-  function handleEnterKeyPress(event) {
+  async function handleEnterKeyPress(event) {
     if (event.key === 'Enter') {
 
-      // remove previous results
-      try{
-        const keywordSuggestionsHeader = document.getElementsByClassName("keywordSuggestionsHeader")[0];
-        keywordSuggestionsHeader.innerHTML = '';
-      }
-      catch {
-        console.log("no prev result loaded");
-      }
-      const marketStatsHeader = document.getElementsByClassName("marketStatsHeader")[0];
-      
-      marketStatsHeader.style.display = "none";
+      chrome.storage.sync.get("crawlCount", function(result) {
+        const crawlCount = result.crawlCount;
+        console.log("crawlCount",crawlCount);
+
+        // check if free keyword crawl cnt is below limit
+        if (DAILY_LIMIT_ACTIVE && crawlCount>=DAILYSEARCHLIMIT){
+          alert("You have reached your daily keyword crawl limit. Please upgrade to the premium version to continue.");
+          return 
+        }
+
+        // increase cnt and start search
+        else{
+          chrome.storage.sync.set({crawlCount : crawlCount+1});
+
+          // remove previous results
+          try{
+            const keywordSuggestionsHeader = document.getElementsByClassName("keywordSuggestionsHeader")[0];
+            keywordSuggestionsHeader.innerHTML = '';
+          }
+          catch {
+            console.log("no prev result loaded");
+          }
+          const marketStatsHeader = document.getElementsByClassName("marketStatsHeader")[0];
+          
+          marketStatsHeader.style.display = "none";
 
 
-      const keywordSuggestionsHeader = document.getElementsByClassName("keywordSuggestionsHeader")[0];
-      keywordSuggestionsHeader.innerHTML = '';
-      //keywordSuggestionsHeader.style.display = "none";
+          const keywordSuggestionsHeader = document.getElementsByClassName("keywordSuggestionsHeader")[0];
+          keywordSuggestionsHeader.innerHTML = '';
+          //keywordSuggestionsHeader.style.display = "none";
 
-      // add loading screen until keyword crawl is done
-      displayLoadingScreen()
+          // add loading screen until keyword crawl is done
+          displayLoadingScreen()
 
-      const keyword = inputElement.value;
-      keywordCrawlWrapper(keyword)
-      chrome.runtime.sendMessage({id: "callKeywordCrawl", keyword: keyword});
+          const keyword = inputElement.value;
+          let crawlStats = keywordCrawlWrapper(keyword)
+          crawlStats.then(function(result){
+            crawlStats = result;
+            console.log("crawlStats",crawlStats)
+            displayProductStats(crawlStats)
+          });
 
+          chrome.runtime.sendMessage({id: "callKeywordCrawl", keyword: keyword});
+        }
+      });
     }
   }
   
   inputElement.addEventListener('keydown', handleEnterKeyPress);
-
   wrapper.prepend(inputElement);
   return wrapper
 }
+
+
+
 
 function displayLoadingScreen(){
   const keywordSuggestionsHeader = document.getElementsByClassName("keywordSuggestionsHeader")[0];
@@ -991,7 +1025,7 @@ function removeContent(){
 // PRODUCT STATS
 
 function displayProductStats(productStats){
-  console.log(productStats);
+
   const keywordSuggestionsHeader = document.getElementsByClassName("keywordSuggestionsHeader")[0];
   const marketStatsHeader = document.getElementsByClassName("marketStatsHeader")[0];
 
@@ -1005,9 +1039,8 @@ function displayProductStats(productStats){
 
 
   keywordSuggestionsHeader.style.display = "block";
-  keywordSuggestionsHeader.innerHTML = '<h5 class="">Keywords</h5>';
+  keywordSuggestionsHeader.innerHTML = '<h5 class="">Trending Keywords</h5>';
   //keywordSuggestionsHeader.style.borderBottom = "1px solid #e6e6e6";
-
 
 
   const keywordSuggestions = getKeywordSuggestions(productStats);
@@ -1027,10 +1060,8 @@ function displayProductStats(productStats){
   marketStatsHeader.append(wrapper);
 }
 
-const IGNORE = ["keyword","totalProducts","productsOnSale","descriptionStats"];
 
-function getStatsTableHeader(productStats){
-
+function getStatsTableHeader(){
   statsHeader = document.createElement("div");
   statsHeader.classList.add("row"); //,"bordered","px-3"
 
@@ -1040,8 +1071,9 @@ function getStatsTableHeader(productStats){
   keywordHeader.innerHTML = productStats.keyword;
   keywordHeader.style = "font-weight: bold; size: 1.2em; "
   */
-
-  listStats = ["marketSize","keyword","avgSaleDiscount","averageRating","totalProducts","averagePrice","medianPrice","productsOnSale","averageRatingCount","descriptionStats"];
+  const IGNORE = ["keyword","totalProducts","productsOnSale","descriptionStats"];
+  const listStats = ["marketSize","keyword","avgSaleDiscount","averageRating","totalProducts","averagePrice","medianPrice","productsOnSale","averageRatingCount","descriptionStats"];
+  
   labelMap = {
     "keyword": "Keyword",
     "totalProducts": "Total Products",
@@ -1070,27 +1102,6 @@ function getStatsTableHeader(productStats){
   return statsHeader
 }
 
-function getKeywordSuggestions(productStats){
-
-  keywordSuggestionsInner = document.createElement("div","keywordSuggestions");
-  keywordSuggestionsInner.classList.add("px-3","keywordSuggestions"); //, "align-items-start"
-  keywordSuggestionsInner.style.borderTop = "2px solid #e6e6e6";
-      
-  
-  const descriptionStats = productStats['descriptionStats'];
-  const descriptionStatsKeys = Object.keys(descriptionStats);
-  const descriptionStatsValues = Object.values(descriptionStats);
-
-  for (const i in descriptionStatsKeys){
-
-    percentage = (descriptionStatsValues[i]/productStats.totalProducts)*100;
-    keywordSuggestionsInner.innerHTML += descriptionStatsKeys[i]
-    keywordSuggestionsInner.innerHTML +=  " <span class='small ml-2 d-inline-block'>"+"("+percentage.toFixed(2)+"%)"+"</span> "
-  }
-
-  return keywordSuggestionsInner
-}
-
 function getStatsTable(productStats){
 
   statsInner = document.createElement("div");
@@ -1110,7 +1121,7 @@ function getStatsTable(productStats){
   }
 
   listStats = ["marketSize","keyword","avgSaleDiscount","averageRating","totalProducts","averagePrice","medianPrice","productsOnSale","averageRatingCount","descriptionStats"];
-
+  const IGNORE = ["keyword","totalProducts","productsOnSale","descriptionStats"];
 
   for (const i in listStats){
     if (IGNORE.indexOf(listStats[i]) != -1){
@@ -1129,4 +1140,189 @@ function getStatsTable(productStats){
     statsInner.appendChild(statDiv);
   }
   return statsInner
+}
+
+
+function getKeywordSuggestions(productStats){
+
+  keywordSuggestionsInner = document.createElement("div","keywordSuggestions");
+  keywordSuggestionsInner.classList.add("px-3","keywordSuggestions"); //, "align-items-start"
+  keywordSuggestionsInner.style.borderTop = "2px solid #e6e6e6";
+      
+  header = getKeywordSuggestionsHeader();
+  keywordSuggestionsInner.append(header);
+
+  console.log(productStats)
+
+  const originalKeyword = productStats['keyword'];
+  const descriptionStats = productStats['descriptionStats'];
+
+  // sort keywords by count
+  sortedStats = [];
+  for (const keyword in descriptionStats){
+    sortedStats.push([keyword,descriptionStats[keyword]]);
+  }
+  sortedStats.sort(function(a, b) {
+    return b[1] - a[1];
+  });
+
+  i = 0;
+  for (const stat of sortedStats) {
+      const keyword = stat[0];
+      const count = stat[1];
+
+      console.log(i, ISPREMIUM, FREE_LIMIT)
+
+      if (ISPREMIUM || i<FREE_LIMIT){
+        const row = getKeywordSuggestionRow(originalKeyword+" "+keyword, count);
+        keywordSuggestionsInner.append(row);
+      }
+      else{
+        const row = getDummyRow();
+        keywordSuggestionsInner.append(row);
+      }
+      i++;
+  }
+
+  if (!ISPREMIUM){
+    const row = getPremiumUpgradeRow();
+    keywordSuggestionsInner.append(row);
+  }
+
+  return keywordSuggestionsInner
+}
+
+function getPremiumUpgradeRow(){
+  const row = document.createElement("div");
+  row.classList.add("row","keywordSuggestionRow");
+  row.innerHTML = '<div class="col">Upgrade to <a target="_blank" rel="noopener noreferrer" href="https://tpt-informer.web.app/"><u>premium</u></a> to see more keywords</div>';
+  return row 
+}
+
+
+function getKeywordSuggestionsHeader(){
+
+  suggestionsHeader = document.createElement("div");
+  suggestionsHeader.classList.add("row"); //,"bordered","px-3"
+
+  listStats = ["keyword","marketSize","avgSaleDiscount","averageRating","totalProducts","averagePrice","medianPrice","productsOnSale","averageRatingCount","descriptionStats"];
+  IGNORE = ["totalProducts","productsOnSale","descriptionStats"];
+
+  labelMap = {
+    "keyword": "Keyword",
+    "totalProducts": "Total Products",
+    "averagePrice": "Avg. Price est.",
+    "productsOnSale": "Products on Sale",
+    "avgSaleDiscount": "Avg. sale discount est.",
+    "averageRating": "Avg. rating est.",
+    "averageRatingCount": "Rating count est.",
+    "descriptionStats": "Keywords",
+    "marketSize": "Market Size",
+    "medianPrice": "Median Price est."
+  }
+
+  for (const i in listStats){
+    stat = listStats[i];
+
+    if (IGNORE.indexOf(stat) != -1){
+      continue
+    }
+    statDiv = document.createElement("div");
+
+    if (stat=='keyword'){
+      statDiv.classList.add("col-3"); 
+    }
+    else {
+      statDiv.classList.add("col");
+    }
+
+    statDiv.innerHTML = labelMap[listStats[i]]
+    statDiv.style = "font-weight: bold; size: 0.5em;"
+    suggestionsHeader.appendChild(statDiv);
+  }   
+  return suggestionsHeader
+}
+
+
+function getKeywordSuggestionRow(keyword,count){
+  const row = document.createElement("div");
+  row.classList.add("row","keywordSuggestionRow");
+
+  crawlStats = keywordCrawlWrapper(keyword);
+  console.log(crawlStats);
+
+  crawlStats.then(function(result){
+    crawlStats = result;
+
+    listStats = ["keyword","marketSize","avgSaleDiscount","averageRating","totalProducts","averagePrice","medianPrice","productsOnSale","averageRatingCount","descriptionStats"];
+    IGNORE = ["totalProducts","productsOnSale","descriptionStats"];
+    addMap = {
+      "keyword": "",
+      "totalProducts": "",
+      "averagePrice": "$",
+      "productsOnSale": "",
+      "avgSaleDiscount": "%",
+      "averageRating": "/5",
+      "averageRatingCount": " Ratings",
+      "descriptionStats": "",
+      "marketSize": "",
+      "medianPrice": "$"
+    }
+  
+    for (const i in listStats){
+      if (IGNORE.indexOf(listStats[i]) != -1){
+        continue
+      }
+      stat = listStats[i];
+      statDiv = document.createElement("div");
+
+      if (stat=='keyword'){
+        statDiv.classList.add("col-3"); 
+      }
+      else {
+        statDiv.classList.add("col");
+      }
+
+      statDiv.innerHTML = crawlStats[stat]+addMap[stat];
+      row.appendChild(statDiv);
+    }
+  })
+  return row
+}
+
+function getDummyRow(){
+  const row = document.createElement("div");
+  row.classList.add("row","keywordSuggestionRow");
+
+  // create array of dummy values and choose random value
+  const dummyKeyword = ["dummy","NoRealKeyword","NotAKey","NotAKeyword","NotARealKeyword","NoKEY","NoExploit!"];
+  const dummyMarketSize = ["10314214","123","1234","12345","123456","1234567","12345678","123456789","1234567890"];
+  const dummyAvgSaleDiscount = ["0.00","0.01","0.02","0.03","0.04","0.05","0.06","0.07","0.08"];
+  const dummyAverageRating = ["4.8","4.9","5.0"];
+  const dummyAveragePrice = ["$1.00","$1.01","$1.02","$1.03","$1.04","$1.05","$1.06","$1.07","$1.08"];
+  const dummyMedianPrice = ["$1.00","$1.01","$1.02","$1.03","$1.04","$1.05","$1.06","$1.07","$1.08"];
+  const dummyAverageRatingCount = ["1","2","1314","123","9562","1324","4124"];
+
+  function getDummyCell(dummyArray){
+    const cell = document.createElement("div");
+    cell.classList.add("col");
+    const randomIndex = Math.floor(Math.random() * dummyArray.length);
+    cell.innerHTML = dummyArray[randomIndex];
+    return cell
+  }
+
+  keyword = getDummyCell(dummyKeyword)
+  keyword.classList.add("col-3");
+  row.appendChild(keyword);
+  row.appendChild(getDummyCell(dummyMarketSize));
+  row.appendChild(getDummyCell(dummyAvgSaleDiscount));
+  row.appendChild(getDummyCell(dummyAverageRating));
+  row.appendChild(getDummyCell(dummyAveragePrice));
+  row.appendChild(getDummyCell(dummyMedianPrice));
+  row.appendChild(getDummyCell(dummyAverageRatingCount));
+
+  //blur row
+  row.style.filter = "blur(4px)";
+
+  return row
 }
