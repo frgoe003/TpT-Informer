@@ -25,7 +25,7 @@ chrome.storage.sync.get(function(result) {
   }
   else{
     loginBtnDiv.style.display = "display-block";
-    loginInput.innerHTML += '<hr style="margin:5px"></hr><div style="justify-content:center;align-items:center">Upgrade to TpT-Informer <a target="_blank" rel="noopener noreferrer" href="https://tpt-informer.web.app/"><u>premium</u></a></div><hr style="margin:5px"></hr>';
+    loginInput.innerHTML += '<hr style="margin:5px"></hr><div style="justify-content:center;align-items:center">Upgrade to TpT-Informer <a target="_blank" rel="noopener noreferrer" href="https://tptinformer.com"><u>premium</u></a></div><hr style="margin:5px"></hr>';
   }
 });
 
@@ -65,7 +65,9 @@ const DEBUG = false;
 let rawSalesMatrix = [];
 
 let IDX = 1;
-let goalDay = false; let goalMonth = false; let goalWeek = false; 
+let goalDay = false; 
+let goalMonth = false; 
+let goalWeek = false; 
 
 if (EARNINGSGOAL == null){
   const EARNINGSGOAL = 5;
@@ -153,6 +155,7 @@ async function retrieveSales(url) {
 
     let earnings = getEarnings(popupSales);
     updateTotals(earnings);
+    updateSalesTable(popupSales);
     
     chrome.storage.sync.set({earnings:earnings});
     chrome.storage.local.set({popupSales:popupSales});
@@ -269,15 +272,16 @@ function getEarnings(popupSales){
 
   for (let i=0; i < popupSales.length; i++){
     let sale = popupSales[i];
-    let saleDate = sale.date;
+    let saleDate = sale.date.split('/');
     let saleEarnings = parseFloat(sale.earnings.replace("$",""));
-    if (saleDate==dayDate){
+
+    if (!date1BeforeDate2(saleDate,getTodaysDate())){
       day+=saleEarnings;
     }
-    if (saleDate>=weekDate[0]+"/"+weekDate[1]+"/"+weekDate[2]){
+    if (!date1BeforeDate2(saleDate,subtractDaysFromDate(getTodaysDate(),7))){
       week+=saleEarnings;
     }
-    if (saleDate>=monthDate[0]+"/"+monthDate[1]+"/"+monthDate[2]){
+    if (!date1BeforeDate2(saleDate,subtractDaysFromDate(getTodaysDate(),30))){
       month+=saleEarnings;
     }
   }
@@ -430,15 +434,15 @@ function getHeader(){
       }).then((responseText) => {
         var parser = new DOMParser();
         var doc = parser.parseFromString(responseText, 'text/html');
-        let img = doc.getElementsByClassName("Image-module__image--PG7Ib"); // Avatar-module__root--eRcqn Avatar-module__xl--wDBxG
+        let img = doc.getElementsByClassName("Image-module__roundedCircle--sgMRY"); // Avatar-module__root--eRcqn Avatar-module__xl--wDBxG
         let imgUrl = img.item(0).src;
 
         let details = doc.getElementsByClassName("SellerDashboardHeader__details")[0]
         let seller = details.querySelectorAll(".Link-module__link--GFbUH"); // SellerDashboard__storeName
 
         let sellerName = seller[0].innerText;
-        nameInput.innerHTML=sellerName;
-        imageInput.src=imgUrl;
+        nameInput.innerHTML = sellerName;
+        imageInput.src = imgUrl;
 
         console.log(sellerName,imgUrl)
       
@@ -510,4 +514,29 @@ function getTodaysDate(){
   let date= [];
   date.push(mm);date.push(dd);date.push(yyyy);
   return date
+}
+
+function date1BeforeDate2(date1,date2){
+  // uses format [mm,dd,yyyy]
+
+  // make sure all values are int
+  for (let i=0; i<3; i++){
+    date1[i] = parseInt(date1[i]);
+    date2[i] = parseInt(date2[i]);
+  }
+
+  if (date1[2]<date2[2]){
+    return true
+  }
+  else if (date1[2]==date2[2]){
+    if (date1[0]<date2[0]){
+      return true
+    }
+    else if (date1[0]==date2[0]){
+      if (date1[1]<date2[1]){
+        return true
+      }
+    }
+  }
+  return false
 }

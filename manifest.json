@@ -1,14 +1,18 @@
 {
-   "name": "TpT Seller Ext",
+   "name": "TpT Informer",
    "description": "A free TpT popup dashboard that updates and notifies you as you sell",
-   "version": "2.0.0",
+   "version": "2.3.5",
    "manifest_version": 3,
    "options_page": "options.html",
    "background": {
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": ["alarms","storage","offscreen","tabs","activeTab"],
+  "permissions": [
+    "alarms",
+    "storage",
+    "offscreen"
+  ],
   "host_permissions": ["*://*.teacherspayteachers.com/*","*://*.firebaseio.com/*","*://*.firebase.google.com/*"],
    "action": {
       "default_popup": "popup.html",
@@ -28,8 +32,14 @@
      "content_scripts": [
       {
         "matches": ["*://*.teacherspayteachers.com/Dashboard/*"],
-        "js": ["content-script.js"],
-        "resources": ["bs5/css/*","bs5/js/*"]
+        "js": ["chartjs.min.js","fontAwesome.min.js","content-script-dash.js"],
+        "css": ["bs5_tpt.css"]
+      },
+      {
+        "matches": ["*://*.teacherspayteachers.com/My-Products/New/*"],
+        "js": ["content-script-product.js"],
+        "resources": ["bs5_tpt.css"]
       }
+
    ]
  }
