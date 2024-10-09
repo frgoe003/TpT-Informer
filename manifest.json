@@ -1,7 +1,7 @@
 {
    "name": "TpT Informer",
    "description": "A free TpT popup dashboard that updates and notifies you as you sell",
-   "version": "2.3.5",
+   "version": "2.3.6",
    "manifest_version": 3,
    "options_page": "options.html",
    "background": {

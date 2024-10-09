@@ -50,7 +50,7 @@ function updateBadge(data) {
 }
 
 chrome.runtime.onInstalled.addListener(function (details) {
-  chrome.storage.sync.set({ soundOn: true });
+  //chrome.storage.sync.set({ soundOn: true });
 
   //chrome.storage.sync.set({isPremium:false});
   chrome.storage.sync.set({ prev: 0 });
@@ -166,14 +166,10 @@ async function retrieveSales() {
 
       chrome.storage.sync.get(function (result) {
         let prev = result.prev;
-
         if (count > prev) {
-
-          chrome.storage.sync.get(function (result) {
-            if (result.soundOn) {
-              createSaleSoundHtml()
-            }
-          });
+          if (result.soundOn) {
+            createSaleSoundHtml()
+          }
           chrome.storage.sync.set({ prev: count });
           chrome.storage.sync.set({ hasChanges: true });
           updateBadge(count.toString());
@@ -433,6 +429,7 @@ function getTodaysDate() {
   const dateArray = [mm, dd, yyyy];
   return dateArray
 }
+
 
 function getCentralDate() {
   const currentDate = new Date();

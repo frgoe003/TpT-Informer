@@ -59,8 +59,8 @@ input.addEventListener("click", function(event) {
   });
 });
 
-const LASTSALESCOUNT = 7;
-const EARNINGSGOAL = 10;
+let LASTSALESCOUNT = 7;
+let EARNINGSGOAL = 10;
 const DEBUG = false;
 let rawSalesMatrix = [];
 
@@ -69,20 +69,22 @@ let goalDay = false;
 let goalMonth = false; 
 let goalWeek = false; 
 
-if (EARNINGSGOAL == null){
-  const EARNINGSGOAL = 5;
-  chrome.storage.sync.set({EARNINGSGOAL:EARNINGSGOAL});
-}
 
-if (LASTSALESCOUNT == null){
-  const LASTSALESCOUNT = 8;
-  chrome.storage.sync.set({LASTSALESCOUNT:LASTSALESCOUNT});
-}
+
 
 chrome.storage.sync.get(function(result) {
   if (!result.soundOn){
     salesSwitch.checked = false;
   }
+
+  if (result.earningsGoal){
+    EARNINGSGOAL = parseFloat(result.earningsGoal);
+  }
+  if (result.lastSalesCount){
+    LASTSALESCOUNT = parseInt(result.lastSalesCount);
+  }
+
+
   getHeader()
   // check if data is stored
   //startup();
@@ -97,11 +99,11 @@ chrome.storage.sync.get(function(result) {
 
     chrome.storage.local.get(function(result) {
       let popupSales = result.popupSales;
-      updateSalesTable(popupSales);
+      //updateSalesTable(popupSales);
     });
 
     let earnings = result.earnings;
-    updateTotals(earnings);
+    //updateTotals(earnings);
   }
 
   if (result.lastPopDate){

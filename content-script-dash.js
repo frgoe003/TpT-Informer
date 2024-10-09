@@ -120,7 +120,7 @@ async function startup() {
       }
       chrome.runtime.sendMessage({ id: "writeSearchRankToRTDB" });
       setTimeout(() => {
-        chrome.storage.sync.set({trackerRepoLastUpdated: todayCentral})
+        chrome.storage.sync.set({ trackerRepoLastUpdated: todayCentral })
       }, 1000);
     }
   })
@@ -389,9 +389,10 @@ async function keywordCrawl(products, IDX, keyword) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(document, 'text/html');
 
-    const marketSizeDiv = doc.querySelectorAll(".SearchResultsHeader__resultsFor")[0]
-    const span = marketSizeDiv.querySelectorAll('.Text-module__bodyBase--iQGdU')[0].innerText;
-    const marketSize = span.split(' ')[0]
+    const marketSizeDiv = doc.querySelectorAll(".SearchResultsHeader")[0]
+    const span = marketSizeDiv?.querySelectorAll('.Text-module__bodyBase--iQGdU')[0].textContent;
+    const marketSize = span?.split(' ')[0] || '';
+
 
     const rows = doc.querySelectorAll(".ProductRowLayout");
     const productsNew = processKeywordCrawl(rows, marketSize);
@@ -512,6 +513,8 @@ function processKeywordCrawl(rows, marketSize) {
   });
   return products
 }
+
+
 
 function analyzeKeywordCrawl(keyword, products) {
 
@@ -776,6 +779,7 @@ function getStatsTableHeader() {
 
   return statsHeader
 }
+
 
 function getStatsTable(productStats) {
 
@@ -3455,14 +3459,19 @@ function getDashboard() {
   let salesCard = getDashboardSalesCard()
   let salesChart = getDashboardSalesChartCard()
   let productsCard = getDashboardProductsCard()
+  let lastSalesCard = getDashboardLastSalesCard()
+
 
   dashboardDiv.appendChild(salesCard);
   dashboardDiv.appendChild(productsCard);
 
   dashboardDiv.appendChild(salesChart);
+  dashboardDiv.appendChild(lastSalesCard);
+
   setTimeout(() => {
     createWeekSalesChart(weeklySales);
   }, 50)
+
 
   return dashboardDiv
 }
@@ -4214,6 +4223,7 @@ function getDashboardProductsCardStats() {
 }
 
 
+// Popularity Card
 async function addPopularityScoresCard() {
 
   if (document.querySelector(".popularityCard")) {
@@ -4361,12 +4371,215 @@ function getPopularityCard(popularityScores) {
   return popularityCardWrapper
 }
 
+// Last Sales Card
+function getDashboardLastSalesCard() {
+  // Show Top 5 weekly products with sales and earnings in a card
+  let lastSalesCardWrapper = document.createElement('div');
+  lastSalesCardWrapper.className = 'col-4';
+
+  let lastSalesCard = document.createElement('div');
+  lastSalesCard.className = 'card mb-2 border';
+
+  // CARD HEADER
+  let cardHeader = document.createElement('div');
+  cardHeader.className = 'bg-light p-3';
+
+  let icon = document.createElement('i');
+  icon.className = 'fa-solid fa-receipt';
+
+  let cardHeaderSpan = document.createElement('span');
+  cardHeaderSpan.style.marginLeft = '5px';
+  cardHeaderSpan.innerText = 'Top Sales';
+  cardHeaderSpan.style.fontSize = '1rem';
+
+  cardHeader.appendChild(icon);
+  cardHeader.appendChild(cardHeaderSpan);
+  lastSalesCard.appendChild(cardHeader);
+
+  // Last sales
+  let topWeeklySales = getTopWeeklySales();
+  let topMonthlySales = getTopMonthlySales();
+
+  let salesListWrapper = document.createElement('div');
+  salesListWrapper.className = 'card-body p-3';
+  let salesList = document.createElement('ul');
+  salesList.className = 'list-group list-group-flush';
+  // Adding weekly sales
+  let weeklySalesWrapper = document.createElement('div');
+  weeklySalesWrapper.className = 'pb-3';
+  let weeklySalesItem = document.createElement('li');
+  weeklySalesItem.className = 'list-group-item';
+
+  let weeklySalesTitle = document.createElement('h5');
+  weeklySalesTitle.innerText = 'Top Earners - Last 7 Days';
+  weeklySalesItem.appendChild(weeklySalesTitle);
+
+  let weeklySalesTable = document.createElement('table');
+  weeklySalesTable.className = 'table';
+
+  let weeklySalesTableBody = document.createElement('tbody');
+  topWeeklySales.forEach(sale => {
+    let tableRow = document.createElement('tr');
+    let nameCell = document.createElement('td');
+    let salesCell = document.createElement('td');
+    salesCell.className = "text-muted";
+    let earningsCell = document.createElement('td');
+
+    nameCell.innerText = sale.name;
+    salesCell.innerText = `(${sale.sales})`;
+
+    let salesBannerInnerCol3 = document.createElement('div');
+    salesBannerInnerCol3.className = "col-12 d-flex justify-content-center align-items-center";
+
+    let salesBannerInnerCol3Span = document.createElement('span');
+    salesBannerInnerCol3Span.innerText = "$";
+    salesBannerInnerCol3Span.className = "text-warning";
+
+    let salesBannerInnerCol3Span2 = document.createElement('span');
+    salesBannerInnerCol3Span2.innerText = sale.earnings;
+    salesBannerInnerCol3Span2.className = "text-muted";
+
+    salesBannerInnerCol3.appendChild(salesBannerInnerCol3Span);
+    salesBannerInnerCol3.appendChild(salesBannerInnerCol3Span2);
+    earningsCell.appendChild(salesBannerInnerCol3); // Append salesBannerInnerCol3 as a child element
+
+    tableRow.appendChild(nameCell);
+    tableRow.appendChild(earningsCell);
+    tableRow.appendChild(salesCell);
+
+    weeklySalesTableBody.appendChild(tableRow);
+  });
+  weeklySalesTable.appendChild(weeklySalesTableBody);
+  weeklySalesItem.appendChild(weeklySalesTable);
+  weeklySalesWrapper.appendChild(weeklySalesItem);
+  salesList.appendChild(weeklySalesWrapper);
+
+  // Adding monthly sales
+  let monthlySalesItem = document.createElement('li');
+  monthlySalesItem.className = 'list-group-item';
+
+  let monthlySalesTitle = document.createElement('h5');
+  monthlySalesTitle.innerText = 'Top Earners - Last 30 Days';
+  monthlySalesItem.appendChild(monthlySalesTitle);
+
+  let monthlySalesTable = document.createElement('table');
+  monthlySalesTable.className = 'table';
+
+  let monthlySalesTableBody = document.createElement('tbody');
+  topMonthlySales.forEach(sale => {
+    let tableRow = document.createElement('tr');
+    let nameCell = document.createElement('td');
+    let salesCell = document.createElement('td');
+    salesCell.className = "text-muted";
+    let earningsCell = document.createElement('td');
+
+    nameCell.innerText = sale.name;
+    salesCell.innerText = `(${sale.sales})`;
+
+    let salesBannerInnerCol3 = document.createElement('div');
+    salesBannerInnerCol3.className = "col-12 d-flex justify-content-center align-items-center";
+
+    let salesBannerInnerCol3Span = document.createElement('span');
+    salesBannerInnerCol3Span.innerText = "$";
+    salesBannerInnerCol3Span.className = "text-warning";
+
+    let salesBannerInnerCol3Span2 = document.createElement('span');
+    salesBannerInnerCol3Span2.innerText = sale.earnings;
+    salesBannerInnerCol3Span2.className = "text-muted";
+
+    salesBannerInnerCol3.appendChild(salesBannerInnerCol3Span);
+    salesBannerInnerCol3.appendChild(salesBannerInnerCol3Span2);
+    earningsCell.appendChild(salesBannerInnerCol3); // Append salesBannerInnerCol3 as a child element
+
+    tableRow.appendChild(nameCell);
+    tableRow.appendChild(earningsCell);
+    tableRow.appendChild(salesCell);
+
+    monthlySalesTableBody.appendChild(tableRow);
+  });
+  monthlySalesTable.appendChild(monthlySalesTableBody);
+  monthlySalesItem.appendChild(monthlySalesTable);
+  salesList.appendChild(monthlySalesItem);
+
+  salesListWrapper.appendChild(salesList);
+
+  lastSalesCard.appendChild(salesListWrapper);
+  lastSalesCardWrapper.appendChild(lastSalesCard);
+  return lastSalesCardWrapper;
+}
+
+function getTopWeeklySales() {
+  if (!weeklySales || !weeklySales.length) {
+    return [];
+  }
+
+  // Count sales per product and return top 5
+  // If product has multiple sales, sum them up. Store name, total earnings and number of sales
+  let productSales = {};
+
+  weeklySales.forEach(sale => {
+    if (productSales[sale.itemSold]) {
+      productSales[sale.itemSold]["sales"] += 1;
+      productSales[sale.itemSold]["earnings"] += parseFloat(sale.earnings.replace("$", ""));
+    } else {
+      productSales[sale.itemSold] = {
+        sales: 1,
+        earnings: parseFloat(sale.earnings.replace("$", "")),
+        name: sale.itemSold // Assuming 'product' is the name of the product
+      };
+    }
+  });
+
+  // Transform productSales into an array, sort it by earnings, and then take the top 5
+  let sortedSales = Object.values(productSales).sort((a, b) => b.earnings - a.earnings);
+  let topWeeklySales = sortedSales.slice(0, 5);
+
+  topWeeklySales.forEach(sale => {
+    sale.earnings = sale.earnings.toFixed(2);
+  })
+
+  return topWeeklySales;
+}
+
+function getTopMonthlySales() {
+  if (!monthlySales || !monthlySales.length) {
+    return [];
+  }
+
+  // Count sales per product and return top 5
+  // If product has multiple sales, sum them up. Store name, total earnings and number of sales
+  let productSales = {};
+
+  monthlySales.forEach(sale => {
+    if (productSales[sale.itemSold]) {
+      productSales[sale.itemSold]["sales"] += 1;
+      productSales[sale.itemSold]["earnings"] += parseFloat(sale.earnings.replace("$", ""));
+    } else {
+      productSales[sale.itemSold] = {
+        sales: 1,
+        earnings: parseFloat(sale.earnings.replace("$", "")),
+        name: sale.itemSold // Assuming 'product' is the name of the product
+      };
+    }
+  });
+
+  // Transform productSales into an array, sort it by earnings, and then take the top 5
+  let sortedSales = Object.values(productSales).sort((a, b) => b.earnings - a.earnings);
+  let topMonthlySales = sortedSales.slice(0, 5);
+
+  topMonthlySales.forEach(sale => {
+    sale.earnings = sale.earnings.toFixed(2);
+  })
+
+  return topMonthlySales;
+}
+
+
 
 
 
 
 // RANKINGS
-
 function addUserRankingDiv() {
   let rankingDiv = document.createElement("div");
 
@@ -5575,14 +5788,14 @@ function showTrackerProductDetails(product) {
 
 function getComeBackTomorrowMessage() {
   let message = document.createElement('div');
-  message.className = 'col-12 m-2 comeBackTomorrowMessage'; 
+  message.className = 'col-12 m-2 comeBackTomorrowMessage';
   message.innerHTML = '<h5>Check back tomorrow for updated search rank data.</h5>';
   return message;
 }
 
 function getFoundDataMessage() {
   let message = document.createElement('div');
-  message.className = 'col-12 m-2 foundDataMessage'; 
+  message.className = 'col-12 m-2 foundDataMessage';
   message.innerHTML = '<h5>Found historic data for this keyword.</h5>';
   return message;
 }
@@ -5624,24 +5837,24 @@ async function addTrackerSelectorBar() {
         console.log(data)
         // check if data empty
         if (!data.length && !document.querySelector("comeBackTomorrowMessage")) {
-            topMoversWrapper.appendChild(comeBackTomorrowMessage);
+          topMoversWrapper.appendChild(comeBackTomorrowMessage);
         }
         else if (data.length && !document.querySelector("foundDataMessage")) {
-            topMoversWrapper.appendChild(foundDataMessage);
-            globalTrackerRepo[0] = data;
-            chrome.storage.local.get(function (result) {
-              if (result.trackerRepo && result.trackerRepo[0]) {
-                let trackerRepo = result.trackerRepo
-                trackerRepo[0].data = globalTrackerRepo[0]
-                chrome.storage.local.set({ trackerRepo: trackerRepo });
-              }
-              else {
-                let trackerRepo = [{}, {}, {}, {}, {}]
-                trackerRepo[0] = {}
-                trackerRepo[0].data = globalTrackerRepo[0]
-                chrome.storage.local.set({ trackerRepo: trackerRepo });
-              }
-            })
+          topMoversWrapper.appendChild(foundDataMessage);
+          globalTrackerRepo[0] = data;
+          chrome.storage.local.get(function (result) {
+            if (result.trackerRepo && result.trackerRepo[0]) {
+              let trackerRepo = result.trackerRepo
+              trackerRepo[0].data = globalTrackerRepo[0]
+              chrome.storage.local.set({ trackerRepo: trackerRepo });
+            }
+            else {
+              let trackerRepo = [{}, {}, {}, {}, {}]
+              trackerRepo[0] = {}
+              trackerRepo[0].data = globalTrackerRepo[0]
+              chrome.storage.local.set({ trackerRepo: trackerRepo });
+            }
+          })
         }
 
         searchRankTrackerCrawlWrapper(newKeyword, 5, 0).then(() => {
@@ -5687,11 +5900,11 @@ async function addTrackerSelectorBar() {
         console.log(data)
         // check if data empty
         if (!data.length && !document.querySelector("comeBackTomorrowMessage")) {
-            topMoversWrapper.appendChild(comeBackTomorrowMessage);
+          topMoversWrapper.appendChild(comeBackTomorrowMessage);
         }
         else if (data.length && !document.querySelector("foundDataMessage")) {
-            topMoversWrapper.appendChild(foundDataMessage);
-            globalTrackerRepo[1] = data;
+          topMoversWrapper.appendChild(foundDataMessage);
+          globalTrackerRepo[1] = data;
         }
 
         searchRankTrackerCrawlWrapper(newKeyword, 5, 1).then(() => {
@@ -5737,11 +5950,11 @@ async function addTrackerSelectorBar() {
         console.log(data)
         // check if data empty
         if (!data.length && !document.querySelector("comeBackTomorrowMessage")) {
-            topMoversWrapper.appendChild(comeBackTomorrowMessage);
+          topMoversWrapper.appendChild(comeBackTomorrowMessage);
         }
         else if (data.length && !document.querySelector("foundDataMessage")) {
-            topMoversWrapper.appendChild(foundDataMessage);
-            globalTrackerRepo[2] = data;
+          topMoversWrapper.appendChild(foundDataMessage);
+          globalTrackerRepo[2] = data;
         }
 
         searchRankTrackerCrawlWrapper(newKeyword, 5, 2).then(() => {
@@ -5787,11 +6000,11 @@ async function addTrackerSelectorBar() {
         console.log(data)
         // check if data empty
         if (!data.length && !document.querySelector("comeBackTomorrowMessage")) {
-            topMoversWrapper.appendChild(comeBackTomorrowMessage);
+          topMoversWrapper.appendChild(comeBackTomorrowMessage);
         }
         else if (data.length && !document.querySelector("foundDataMessage")) {
-            topMoversWrapper.appendChild(foundDataMessage);
-            globalTrackerRepo[3] = data;
+          topMoversWrapper.appendChild(foundDataMessage);
+          globalTrackerRepo[3] = data;
         }
 
         searchRankTrackerCrawlWrapper(newKeyword, 5, 3).then(() => {
@@ -5837,11 +6050,11 @@ async function addTrackerSelectorBar() {
         console.log(data)
         // check if data empty
         if (!data.length && !document.querySelector("comeBackTomorrowMessage")) {
-            topMoversWrapper.appendChild(comeBackTomorrowMessage);
+          topMoversWrapper.appendChild(comeBackTomorrowMessage);
         }
         else if (data.length && !document.querySelector("foundDataMessage")) {
-            topMoversWrapper.appendChild(foundDataMessage);
-            globalTrackerRepo[4] = data;
+          topMoversWrapper.appendChild(foundDataMessage);
+          globalTrackerRepo[4] = data;
         }
 
         searchRankTrackerCrawlWrapper(newKeyword, 5, 4).then(() => {
@@ -5896,71 +6109,70 @@ async function addTrackerSelectorBar() {
 
 
 
-async function checkTrackerSearchinRTDB(keyword){
+async function checkTrackerSearchinRTDB(keyword) {
   let queryKeword = keyword.replace(/ /g, '%2520');
-  url = "https://tpt-informer-default-rtdb.firebaseio.com/searchRank/"+queryKeword+".json"
+  url = "https://tpt-informer-default-rtdb.firebaseio.com/searchRank/" + queryKeword + ".json"
 
   return fetch(url)
-  .then(response => {
-    if (!response.ok) {
-      throw new Error(`Network response was not ok, status: ${response.status}`);
-    }
-    return response.json();
-  })
-  .then(data => {
-    console.log(data)
-
-    /*
-    bring data to the format of globalTrackerRepo:
-    [
-      {
-        price: [[date, price], [date, price], ...],
-        rating: [[date, rating], [date, rating], ...],
-        ratingCount: [[date, ratingCount], [date, ratingCount], ...],
-        rank: [[date, rank], [date, rank], ...],
-        title: title,
-        sellerName: sellerName,
-        url: url,
-        id: id
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`Network response was not ok, status: ${response.status}`);
       }
-    ]
-    */
+      return response.json();
+    })
+    .then(data => {
+      console.log(data)
 
-    let formattedData = {}
-    let products = []
-    for (let key in data) {
-      let product = data[key];
-      let newProduct = {
-        price: [],
-        rating: [],
-        ratingCount: [],
-        rank: [],
-        title: product.title,
-        sellerName: product.sellerName,
-        url: product.url,
-        id: key
+      /*
+      bring data to the format of globalTrackerRepo:
+      [
+        {
+          price: [[date, price], [date, price], ...],
+          rating: [[date, rating], [date, rating], ...],
+          ratingCount: [[date, ratingCount], [date, ratingCount], ...],
+          rank: [[date, rank], [date, rank], ...],
+          title: title,
+          sellerName: sellerName,
+          url: url,
+          id: id
+        }
+      ]
+      */
+
+      let formattedData = {}
+      let products = []
+      for (let key in data) {
+        let product = data[key];
+        let newProduct = {
+          price: [],
+          rating: [],
+          ratingCount: [],
+          rank: [],
+          title: product.title,
+          sellerName: product.sellerName,
+          url: product.url,
+          id: key
+        }
+
+        Object.keys(product.history).forEach(date => {
+          let curr_history = product.history[date]
+          newProduct.price.push([date, curr_history.price])
+          //formattedProduct.rating.push([date, history.rating])
+          //formattedProduct.ratingCount.push([date, history.ratingCount])
+          newProduct.rank.push([date, curr_history.rank])
+        })
+
+        products.push(newProduct)
       }
+      formattedData.data = products
+      formattedData.keyword = keyword
 
-      Object.keys(product.history).forEach(date => {
-        let curr_history = product.history[date]
-        newProduct.price.push([date, curr_history.price])
-        //formattedProduct.rating.push([date, history.rating])
-        //formattedProduct.ratingCount.push([date, history.ratingCount])
-        newProduct.rank.push([date, curr_history.rank])
-      })
-      
-      products.push(newProduct)
-    }
-    formattedData.data = products
-    formattedData.keyword = keyword
 
-    
+      //formattedData.lastUpdated = mostRecentDate
 
-    formattedData.lastUpdated = mostRecentDate
-
-    return formattedData
-  })
-  .catch(error => {
-    console.error('There has been a problem with your fetch operation:', error);
-  })
+      return formattedData
+    })
+    .catch(error => {
+      console.error('There has been a problem with your fetch operation:', error);
+    })
 }
