@@ -1,3 +1,4 @@
 7zz
 past_versions/
 *.zip
+.DS_Store
